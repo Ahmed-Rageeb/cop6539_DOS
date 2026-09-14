@@ -4,13 +4,13 @@ Everything below is run from a **Command Prompt** (or PowerShell) in the
 `Project1` folder:
 
 ```
-cd C:\Users\ASUS\cop6539_DOS\Project1
+cd "D:\UF\Saiful courses\DOS\cop6539_DOS\Project1"
 ```
 
 Build once, after any code change:
 
 ```
-build.bat
+.\build.bat
 ```
 
 You should see `Build OK.` If you see `BUILD FAILED`, the error above it tells
@@ -40,7 +40,7 @@ taskkill /F /IM erl.exe
 ## A1. Does it find the right coins?
 
 ```
-mine 4 30
+.\mine.bat 4 30
 ```
 
 Mines coins with 4 leading zeros for 30 seconds. You will see a flood of lines
@@ -59,7 +59,7 @@ correct.
 To find it without scrolling:
 
 ```
-mine 4 30 > coins_k4.txt
+.\mine.bat 4 30 > coins_k4.txt
 findstr 47622 coins_k4.txt
 ```
 
@@ -114,10 +114,10 @@ first.
 ## A4. Try other zero counts
 
 ```
-mine 1 10
-mine 2 10
-mine 3 10
-mine 6 60
+.\mine.bat 1 10
+.\mine.bat 2 10
+.\mine.bat 3 10
+.\mine.bat 6 60
 ```
 
 Known-correct first coins, if you want to check the output:
@@ -147,7 +147,7 @@ Read the `CPU/REAL` column: it should be lowest at chunk 100, peak around
 Leave off the seconds argument and it mines until you stop it:
 
 ```
-mine 4
+.\mine.bat 4
 ```
 
 Press **Ctrl+C** twice to quit. Note: quitting this way skips the summary, so
@@ -167,7 +167,7 @@ each other.
 ## B1. Find your IP
 
 ```
-mine 4 5
+.\mine.bat 4 5
 ```
 
 Look at the banner it prints:
@@ -183,18 +183,18 @@ Note that address. On this laptop it is currently `192.168.1.124`.
 
 ## B2. Open TWO Command Prompt windows
 
-Both in `C:\Users\ASUS\cop6539_DOS\Project1`.
+Both in `D:\UF\Saiful courses\DOS\cop6539_DOS\Project1`.
 
 **Window 1 — the server:**
 
 ```
-mine 6 120
+.\mine.bat 6 120
 ```
 
 **Window 2 — the worker** (start it a few seconds later):
 
 ```
-mine 192.168.1.124
+.\mine.bat 192.168.1.124
 ```
 
 ## B3. What you should see
@@ -254,7 +254,7 @@ about a minute:
 
 Start the server in window 1 within that minute and the worker joins.
 
-**Wrong address:** `mine 10.255.255.1` — it should fail with a clear message
+**Wrong address:** `.\mine.bat 10.255.255.1` — it should fail with a clear message
 after about a minute, not hang.
 
 ---
@@ -277,7 +277,7 @@ Connect both laptops to the same hotspot before going further.
 Right-click **PowerShell** → **Run as Administrator**, then:
 
 ```
-cd C:\Users\ASUS\cop6539_DOS\Project1
+cd "D:\UF\Saiful courses\DOS\cop6539_DOS\Project1"
 powershell -ExecutionPolicy Bypass -File .\allow-firewall.ps1 -SetPrivate
 ```
 
@@ -298,7 +298,7 @@ On the worker laptop:
 1. Install Erlang: `winget install --id Erlang.ErlangOTP -e`
 2. Add `C:\Program Files\Erlang OTP\bin` to PATH
 3. `git clone https://github.com/Ahmed-Rageeb/cop6539_DOS.git`
-4. `cd cop6539_DOS\Project1` then `build.bat`
+4. `cd cop6539_DOS\Project1` then `.\build.bat`
 
 The worker laptop does **not** need the firewall script — it makes the outgoing
 connection, it does not accept one.
@@ -308,7 +308,7 @@ connection, it does not accept one.
 On the server laptop:
 
 ```
-mine 6 300
+.\mine.bat 6 300
 ```
 
 (K = 6 for a demo — coins appear every few seconds rather than by the thousand,
@@ -324,7 +324,7 @@ If that address looks wrong — for example it starts with `172.` and you have
 Docker or WSL installed — override it with the third argument:
 
 ```
-mine 6 300 192.168.1.124
+.\mine.bat 6 300 192.168.1.124
 ```
 
 ## C4. Start the worker
@@ -332,7 +332,7 @@ mine 6 300 192.168.1.124
 On your teammate's laptop:
 
 ```
-mine 192.168.1.124
+.\mine.bat 192.168.1.124
 ```
 
 using whatever address the server printed.
@@ -371,11 +371,11 @@ Work through these in order:
 
 | Command | What it does |
 |---|---|
-| `build.bat` | Compile |
-| `mine 4` | Server, 4 leading zeros, until Ctrl+C |
-| `mine 4 60` | Server, 60 seconds, then print the summary |
-| `mine 4 60 192.168.1.7` | Server, forcing the advertised IP |
-| `mine 192.168.1.124` | Worker joining that server |
+| `.\build.bat` | Compile |
+| `.\mine.bat 4` | Server, 4 leading zeros, until Ctrl+C |
+| `.\mine.bat 4 60` | Server, 60 seconds, then print the summary |
+| `.\mine.bat 4 60 192.168.1.7` | Server, forcing the advertised IP |
+| `.\mine.bat 192.168.1.124` | Worker joining that server |
 | `mine` | Usage help |
 | `taskkill /F /IM erl.exe` | Stop everything that is mining |
 
@@ -386,14 +386,14 @@ if you close a window. Delete that file when you want a clean slate.
 
 # Searching for coins with more zeros
 
-Every run starts at candidate 0 by default, so running `mine 7 1800` twice
+Every run starts at candidate 0 by default, so running `.\mine.bat 7 1800` twice
 searches the *same* numbers twice and finds the same coins. To go further,
 resume where the previous run stopped — its summary tells you how many hashes
 it did:
 
 ```
-mine 7 1800                      first run:  0 .. ~6.7 billion
-mine 7 2700 start=6745370000     continues from there
+.\mine.bat 7 1800                      first run:  0 .. ~6.7 billion
+.\mine.bat 7 2700 start=6745370000     continues from there
 ```
 
 At roughly 4 M hashes/sec, expect one 7-zero coin per ~66 seconds, one 8-zero

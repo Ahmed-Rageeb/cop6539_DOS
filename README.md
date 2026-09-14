@@ -24,16 +24,16 @@ Build once:
 
 ```
 cd Project1
-build.bat
+.\build.bat
 ```
 
 ## 2. Running
 
 ```
-mine 4                     server, mining coins with 4 leading zeros, until Ctrl+C
-mine 4 60                  server, stopping after 60 seconds and printing a summary
-mine 4 60 192.168.1.7      server, advertising that exact IP to workers
-mine 10.22.13.155          worker, joining the server at that address
+.\mine.bat 4                     server, mining coins with 4 leading zeros, until Ctrl+C
+.\mine.bat 4 60                  server, stopping after 60 seconds and printing a summary
+.\mine.bat 4 60 192.168.1.7      server, advertising that exact IP to workers
+.\mine.bat 10.22.13.155          worker, joining the server at that address
 ```
 
 Server options may appear in any position: `start=N` begins the search at candidate N
@@ -43,7 +43,7 @@ A numeric first argument means "be the server"; anything containing a dot or col
 "be a worker and go find the server there".
 
 Coins go to **stdout**, one per line, as `input<TAB>hash`. Progress and the summary go to
-**stderr**, so `mine 4 60 > coins.txt` captures exactly the required output and nothing else.
+**stderr**, so `.\mine.bat 4 60 > coins.txt` captures exactly the required output and nothing else.
 Workers print no coins at all — the server prints every coin, as the assignment requires.
 
 ---
@@ -112,7 +112,7 @@ balance.
 ## 4. Result of running the program for input 4
 
 ```
-mine 4 60
+.\mine.bat 4 60
 ```
 
 First ten lines of stdout (the full run produced **3,755 coins**; order varies between runs
@@ -188,7 +188,7 @@ breakdown, both of which the summary also prints.
 | **SHA-256** | `0000000bb82cd9d866f47fc207fecb0b3999e0c02a5b161bd6048784abcc1960` |
 | **Leading zeros** | **7** |
 
-Found during a sustained `mine 7 1800` run: 30 minutes, **6,745,370,000 hashes**, which
+Found during a sustained `.\mine.bat 7 1800` run: 30 minutes, **6,745,370,000 hashes**, which
 yielded **35 distinct coins with 7 leading zeros**. Every coin with 7 leading zeros also
 satisfies K = 1…6, so the program discovers its own record as a side effect — the boss tracks
 the maximum number of leading zeros it has ever been told about, whatever K the run was
@@ -199,14 +199,14 @@ every 66 seconds, one 8-zero coin every ~18 minutes, and one 9-zero coin every ~
 
 ### Searching further than one run can reach
 
-By default a run always starts at candidate 0, which keeps results reproducible — `mine 4`
+By default a run always starts at candidate 0, which keeps results reproducible — `.\mine.bat 4`
 always finds `ahmedrageebahsan;47622` first. The consequence is that a second run re-covers
 exactly the ground the first one already searched, so simply running again finds nothing new.
 
 To push deeper into the space, resume past the last run:
 
 ```
-mine 7 2700 start=6745370000
+.\mine.bat 7 2700 start=6745370000
 ```
 
 The full run summary and all 35 coins from the record run are in
@@ -312,7 +312,7 @@ powershell -ExecutionPolicy Bypass -File .\allow-firewall.ps1
 Then:
 
 ```
-mine 6
+.\mine.bat 6
 ```
 
 It prints the address to give the workers:
@@ -327,7 +327,7 @@ It prints the address to give the workers:
 On the **worker** laptop:
 
 ```
-mine 192.168.1.124
+.\mine.bat 192.168.1.124
 ```
 
 The server logs `Worker joined: ...` and its hash rate rises. The worker prints nothing but
@@ -343,7 +343,7 @@ diagnostics.
   not apply.
 * **Wrong IP.** A laptop with WSL, Docker, VirtualBox or Hyper-V has several IPv4 addresses.
   The server prefers ordinary `192.168.x.x` / `10.x.x.x` LAN ranges, prints the one it picked,
-  and accepts an override as its third argument (`mine 6 300 192.168.1.7`) if it still guesses
+  and accepts an override as its third argument (`.\mine.bat 6 300 192.168.1.7`) if it still guesses
   wrong.
 * **epmd.** Distribution needs the Erlang port mapper daemon on TCP 4369. The VM starts it
   automatically only when a node name is passed on the command line, and the documented manual
@@ -362,9 +362,9 @@ diagnostics.
 |---|---|
 | Actor model only, boss + workers | `actors.erl`; no ETS, no shared state, no other parallelism |
 | Boss assigns ranges, tracks problems | `boss_loop/1`, `NextN` advanced per request |
-| Input is number of zeros on the command line | `mine 4` → `app:main(["4"])` |
+| Input is number of zeros on the command line | `.\mine.bat 4` → `app:main(["4"])` |
 | Output `input<TAB>hash`, prefixed by a GatorLink ID | stdout, prefix `ahmedrageebahsan` |
-| Worker mode takes a server address | `mine 10.22.13.155` |
+| Worker mode takes a server address | `.\mine.bat 10.22.13.155` |
 | Workers display nothing; server displays all coins | worker stdout is empty; boss is the only printer |
 | Server mines without workers, accepts them as they arrive | local miners start immediately; joins are handled at any time |
 | Work-unit size and how it was determined | §3 |
