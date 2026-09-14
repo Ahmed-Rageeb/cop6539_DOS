@@ -46,9 +46,15 @@ usage() ->
               "COP6539 Project 1 -- distributed bitcoin miner~n~n"
               "  mine <K> [Seconds] [BindIP]   run as the server, mining K leading zeros~n"
               "  mine <ServerIP>    [Miners]   run as a worker for the server at ServerIP~n~n"
+              "Server options (any position):~n"
+              "  start=N     begin the search at candidate N instead of 0,~n"
+              "              to continue past ground an earlier run covered~n"
+              "  chunk=N     candidates per work unit (default 10000)~n"
+              "  miners=N    miner actors (default: one per scheduler)~n~n"
               "Examples:~n"
               "  mine 4~n"
               "  mine 4 30~n"
+              "  mine 7 1800 start=6745370000~n"
               "  mine 10.22.13.155~n", []),
     halt(1).
 
@@ -56,7 +62,8 @@ usage() ->
 %% Server
 %%====================================================================
 
-server_mode(K, Rest) ->
+server_mode(K, Rest0) ->
+    {Opts, Rest} = split_opts(Rest0),
     Duration = case Rest of
                    [D | _] -> case is_number_arg(D) of
                                   true  -> list_to_integer(D) * 1000;
@@ -82,8 +89,32 @@ server_mode(K, Rest) ->
         Ms -> io:format(standard_error, "Mining for ~p seconds.~n~n", [Ms div 1000])
     end,
 
-    actors:start_server(K, #{duration => Duration}),
+    actors:start_server(K, Opts#{duration => Duration}),
     halt(0).
+
+%% Pull `key=value' tokens out of the argument list so they can appear in any
+%% position without disturbing the positional Seconds / BindIP arguments.
+%% Only a fixed set of keys is accepted; anything else stays positional.
+split_opts(Args) ->
+    lists:foldl(
+      fun(Arg, {Opts, Positional}) ->
+              case string:split(Arg, "=") of
+                  [Key, Val] ->
+                      case {opt_key(Key), is_number_arg(Val)} of
+                          {{ok, Atom}, true} ->
+                              {Opts#{Atom => list_to_integer(Val)}, Positional};
+                          _ ->
+                              {Opts, Positional ++ [Arg]}
+                      end;
+                  _ ->
+                      {Opts, Positional ++ [Arg]}
+              end
+      end, {#{}, []}, Args).
+
+opt_key("start")  -> {ok, start};
+opt_key("chunk")  -> {ok, chunk};
+opt_key("miners") -> {ok, miners};
+opt_key(_)        -> error.
 
 %%====================================================================
 %% Worker

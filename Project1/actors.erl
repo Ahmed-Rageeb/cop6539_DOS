@@ -87,6 +87,11 @@ start_server(K, Opts) ->
     Limit    = maps:get(limit, Opts, infinity),
     Prefix   = maps:get(prefix, Opts, project1:gator_id()),
     Quiet    = maps:get(quiet, Opts, false),
+    %% Where in the search space to begin. Runs always start at 0 by default,
+    %% which keeps results reproducible, but that also means a second run
+    %% re-covers ground the first run already searched. To push further into
+    %% the space looking for more leading zeros, resume past the last run.
+    Start    = maps:get(start, Opts, 0),
 
     try unregister(?BOSS) catch _:_ -> ok end,
     register(?BOSS, self()),
@@ -101,8 +106,9 @@ start_server(K, Opts) ->
 
     Quiet orelse
         io:format(standard_error,
-                  "Boss ~p starting: k=~p, ~p miner actors, chunk=~p, prefix=~s~n",
-                  [node(), K, NMiners, Chunk, Prefix]),
+                  "Boss ~p starting: k=~p, ~p miner actors, chunk=~p, "
+                  "start=~p, prefix=~s~n",
+                  [node(), K, NMiners, Chunk, Start, Prefix]),
 
     %% Spawn the local miner actors. They address the boss by the bare
     %% registered name because they share its node.
@@ -119,6 +125,7 @@ start_server(K, Opts) ->
     Quiet orelse erlang:send_after(?TICK_MS, self(), tick),
 
     State = #boss{k = K, prefix = Prefix, chunk = Chunk, limit = Limit,
+                  next = Start,
                   live = NMiners, miners = MinerPids, quiet = Quiet, file = File,
                   rt0 = RT0, wc0 = WC0},
     boss_loop(State).

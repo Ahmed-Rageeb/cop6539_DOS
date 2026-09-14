@@ -381,3 +381,22 @@ Work through these in order:
 
 Coins also accumulate in `Project1\coins.txt` across runs, so nothing is lost
 if you close a window. Delete that file when you want a clean slate.
+
+---
+
+# Searching for coins with more zeros
+
+Every run starts at candidate 0 by default, so running `mine 7 1800` twice
+searches the *same* numbers twice and finds the same coins. To go further,
+resume where the previous run stopped — its summary tells you how many hashes
+it did:
+
+```
+mine 7 1800                      first run:  0 .. ~6.7 billion
+mine 7 2700 start=6745370000     continues from there
+```
+
+At roughly 4 M hashes/sec, expect one 7-zero coin per ~66 seconds, one 8-zero
+coin per ~18 minutes, and one 9-zero coin per ~4.7 hours. These are averages
+over a random process, so a 30-minute run finding no 8-zero coin is ordinary
+bad luck rather than a bug.

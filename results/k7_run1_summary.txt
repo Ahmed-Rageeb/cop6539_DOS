@@ -1,0 +1,11 @@
+===== Mining summary =====
+Machines:      1 (this one + 0 worker node(s))
+Coins found:   35
+Hashes tried:  6745370000
+Hash rate:     3.75M hashes/sec
+REAL time:     1800.004 s
+CPU time:      19781.265 s
+CPU / REAL:    10.99   (cores effectively used on THIS node)
+Best coin:     ahmedrageebahsan;147408969  (7 leading zeros)
+               0000000bb82cd9d866f47fc207fecb0b3999e0c02a5b161bd6048784abcc1960
+==========================

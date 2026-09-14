@@ -36,6 +36,9 @@ mine 4 60 192.168.1.7      server, advertising that exact IP to workers
 mine 10.22.13.155          worker, joining the server at that address
 ```
 
+Server options may appear in any position: `start=N` begins the search at candidate N
+instead of 0, `chunk=N` sets the work-unit size, `miners=N` sets the actor count.
+
 A numeric first argument means "be the server"; anything containing a dot or colon means
 "be a worker and go find the server there".
 
@@ -185,12 +188,29 @@ breakdown, both of which the summary also prints.
 | **SHA-256** | `0000000bb82cd9d866f47fc207fecb0b3999e0c02a5b161bd6048784abcc1960` |
 | **Leading zeros** | **7** |
 
-Found during a sustained high-K run. Every coin with 7 leading zeros also satisfies K = 1…6,
-so the program discovers its own record as a side effect: the boss tracks the maximum number
-of leading zeros it has ever been told about, whatever K the run was launched with.
+Found during a sustained `mine 7 1800` run: 30 minutes, **6,745,370,000 hashes**, which
+yielded **35 distinct coins with 7 leading zeros**. Every coin with 7 leading zeros also
+satisfies K = 1…6, so the program discovers its own record as a side effect — the boss tracks
+the maximum number of leading zeros it has ever been told about, whatever K the run was
+launched with.
 
-For scale, at the measured 4.04 M hashes/sec a single laptop expects one 7-zero coin roughly
+For scale, at the measured ~4 M hashes/sec a single laptop expects one 7-zero coin roughly
 every 66 seconds, one 8-zero coin every ~18 minutes, and one 9-zero coin every ~4.7 hours.
+
+### Searching further than one run can reach
+
+By default a run always starts at candidate 0, which keeps results reproducible — `mine 4`
+always finds `ahmedrageebahsan;47622` first. The consequence is that a second run re-covers
+exactly the ground the first one already searched, so simply running again finds nothing new.
+
+To push deeper into the space, resume past the last run:
+
+```
+mine 7 2700 start=6745370000
+```
+
+The full run summary and all 35 coins from the record run are in
+[`results/`](results/).
 
 ---
 
