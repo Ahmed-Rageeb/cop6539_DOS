@@ -1,0 +1,31 @@
+
+================================================
+ SERVER READY -- node 'boss@192.168.1.124'
+ Workers should be started with:   mine 192.168.1.124
+================================================
+Mining for 60 seconds.
+
+Boss 'boss@192.168.1.124' starting: k=4, 12 miner actors, chunk=10000, prefix=ahmedrageebahsan
+  [5s] coins=302  hashes=19.57M  rate=3.91M/s  CPU/REAL=11.04
+  [10s] coins=612  hashes=40.41M  rate=4.04M/s  CPU/REAL=11.18
+  [15s] coins=913  hashes=61.07M  rate=4.07M/s  CPU/REAL=11.21
+  [20s] coins=1238  hashes=81.81M  rate=4.09M/s  CPU/REAL=11.26
+  [25s] coins=1534  hashes=102.55M  rate=4.10M/s  CPU/REAL=11.27
+  [30s] coins=1854  hashes=122.38M  rate=4.08M/s  CPU/REAL=11.19
+  [35s] coins=2176  hashes=142.45M  rate=4.07M/s  CPU/REAL=11.12
+  [40s] coins=2480  hashes=162.58M  rate=4.06M/s  CPU/REAL=11.07
+  [45s] coins=2803  hashes=182.74M  rate=4.06M/s  CPU/REAL=11.04
+  [50s] coins=3107  hashes=202.87M  rate=4.05M/s  CPU/REAL=11.00
+  [55s] coins=3427  hashes=222.66M  rate=4.04M/s  CPU/REAL=10.95
+
+===== Mining summary =====
+Machines:      1 (this one + 0 worker node(s))
+Coins found:   3755
+Hashes tried:  242450000
+Hash rate:     4.04M hashes/sec
+REAL time:     60.001 s
+CPU time:      655.922 s
+CPU / REAL:    10.93   (cores effectively used on THIS node)
+Best coin:     ahmedrageebahsan;147408969  (7 leading zeros)
+               0000000bb82cd9d866f47fc207fecb0b3999e0c02a5b161bd6048784abcc1960
+==========================

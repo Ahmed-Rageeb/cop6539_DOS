@@ -1,0 +1,13 @@
+# Compiled Erlang bytecode -- rebuild with Project1/build.bat
+*.beam
+
+# Crash dumps
+erl_crash.dump
+
+# Mining output
+coins.txt
+
+# Local test scratch
+*.out
+*.err
+*.log
