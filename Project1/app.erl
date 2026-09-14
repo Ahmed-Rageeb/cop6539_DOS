@@ -144,7 +144,29 @@ start_distribution(NameStr) ->
     %% hang rather than an error.
     application:set_env(kernel, net_setuptime, 3),
     ensure_epmd(),
-    start_distribution(NameStr, 3).
+    %% Check for a name clash BEFORE asking net_kernel to start. Letting it
+    %% fail on its own produces a multi-screen supervisor crash dump that
+    %% buries the one fact the user needs: something is already running.
+    case name_in_use(NameStr) of
+        true ->
+            [Base | _] = string:split(NameStr, "@"),
+            io:format(standard_error,
+                      "~nERROR: a node named '~s' is already running on this machine.~n"
+                      "You probably have another miner open. Close its window, or run:~n"
+                      "    taskkill /F /IM erl.exe~n"
+                      "and then start this one again.~n", [Base]),
+            halt(1);
+        false ->
+            start_distribution(NameStr, 3)
+    end.
+
+%% Is the base name (the part before the @) already registered with epmd?
+name_in_use(NameStr) ->
+    [Base | _] = string:split(NameStr, "@"),
+    case erl_epmd:names({127, 0, 0, 1}) of
+        {ok, Names} -> lists:keyfind(Base, 1, Names) =/= false;
+        _           -> false
+    end.
 
 start_distribution(NameStr, Tries) ->
     case net_kernel:start([list_to_atom(NameStr), longnames]) of
