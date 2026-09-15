@@ -11,3 +11,6 @@ coins.txt
 *.out
 *.err
 *.log
+
+# Ad-hoc run captures
+coins_*.txt
