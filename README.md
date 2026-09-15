@@ -73,16 +73,6 @@ Representative pass (AMD Ryzen 5 5500U, 6 cores / 12 threads, 12 miner actors):
 | 1,000,000  | 4.07 M     | 4.92     | 48.9    | 9.95     |
 | 5,000,000  | 2.34 M     | 8.55     | 32.6    | 3.82     |
 
-The curve has the shape you would expect from a boss/worker system, and the two ends fail for
-opposite reasons:
-
-* **Too small (100–1,000).** A 100-candidate unit takes a miner about 0.3 ms. Miners spend a
-  large fraction of their life in `receive` waiting on the boss, and the boss becomes a
-  serialization point. CPU/REAL collapses to 6.8 — nearly half the machine is idle.
-* **Too large (1M–5M).** At 5,000,000 the 20M-candidate job is only four work units, so only
-  **4 of the 12 miner actors ever receive work** and the other 8 sit idle. CPU/REAL falls to
-  3.8. This is the straggler effect in its purest form: the run cannot finish faster than its
-  slowest single unit.
 * **10,000–100,000** is the flat optimum.
 
 Because 10,000 and 100,000 were within noise of each other on a single pass, and because this
@@ -102,10 +92,6 @@ that the single-machine benchmark cannot show:
   unit, a slow machine holding the last unit stalls the whole run.
 * **Bounded loss.** If a worker laptop is closed mid-chunk, at most 10,000 candidates are
   wasted rather than millions.
-
-The cost of a smaller unit is more network round trips. At 30 ms of work per request against a
-LAN round trip of roughly 1 ms, that is about 3% overhead — comfortably paid for by the better
-balance.
 
 ---
 
@@ -139,9 +125,6 @@ input: ahmedrageebahsan;47622
 sha256: 0000019b236e7af8a54e17bbf7eacf3245b84f008c9aaa9216f71df67247fe89
 ```
 
-As a sanity check on the hashing itself, `project1:test_hash("COP5615 is a boring class")`
-returns `fb4431b6a2df71b6cbad961e08fa06ee6fff47e3bc14e977f4b2ea57caee48a4`, matching the
-value given in the assignment.
 
 ---
 
@@ -172,11 +155,6 @@ whole run. The remaining gap from 12.0 is the usual SMT ceiling: two threads on 
 core do not deliver two cores' worth of throughput on a compute-bound integer workload like
 SHA-256.
 
-A note on honesty in this measurement: the ratio is computed from **the server VM's own CPU
-time**, so it describes parallelism *on the machine running the boss*. When remote workers are
-attached, their CPU is not counted and the ratio therefore *understates* the total work being
-done. For the distributed case the meaningful figure is aggregate hash rate plus the per-machine
-breakdown, both of which the summary also prints.
 
 ---
 
@@ -194,20 +172,6 @@ satisfies K = 1…6, so the program discovers its own record as a side effect �
 the maximum number of leading zeros it has ever been told about, whatever K the run was
 launched with.
 
-For scale, at the measured ~4 M hashes/sec a single laptop expects one 7-zero coin roughly
-every 66 seconds, one 8-zero coin every ~18 minutes, and one 9-zero coin every ~4.7 hours.
-
-### Searching further than one run can reach
-
-By default a run always starts at candidate 0, which keeps results reproducible — `.\mine.bat 4`
-always finds `ahmedrageebahsan;47622` first. The consequence is that a second run re-covers
-exactly the ground the first one already searched, so simply running again finds nothing new.
-
-To push deeper into the space, resume past the last run:
-
-```
-.\mine.bat 7 2700 start=6745370000
-```
 
 The full run summary and all 35 coins from the record run are in
 [`results/`](results/).
@@ -233,60 +197,6 @@ Per machine:
 
 ---
 
-## 8. How it works
-
-### Architecture
-
-```
-                    ┌────────────────────────────┐
-                    │   BOSS  (registered `boss`)│
-                    │  owns NextN, hands out     │
-                    │  disjoint ranges,          │
-                    │  prints every coin         │
-                    └────────────────────────────┘
-                       ▲   │            ▲     │
-      {request_work}   │   │ {work,…}   │     │
-      {coin_found}     │   ▼            │     ▼
-      {chunk_done}  ┌──────────┐     ┌──────────┐
-                    │ miners × │     │ miners × │
-                    │ 12       │     │ 12       │
-                    │ (server) │     │ (worker  │
-                    └──────────┘     │  laptop) │
-                                     └──────────┘
-```
-
-### Location transparency
-
-Each miner carries a `BossRef` in its own arguments instead of looking up the name `boss` on
-its local node. `BossRef` is the bare atom `boss` for a miner beside the boss, and the tuple
-`{boss, BossNode}` for a miner on another machine. `BossRef ! Msg` behaves identically either
-way, so **one copy of `miner_loop/1` runs both locally and remotely** — there is no separate
-"remote" code path to get wrong.
-
-### No duplicate coins
-
-The boss is the only source of ranges and it advances `NextN` monotonically, so every range it
-ever issues is disjoint from every other. Two machines cannot mine the same candidate, and this
-holds without any locking or coordination between workers.
-
-### The hot loop
-
-K leading zero hex digits is exactly 4·K leading zero **bits**, so the inner loop pattern-matches
-`<<0:ZeroBits, _/bitstring>>` directly against the raw 32-byte digest:
-
-```erlang
-Digest = crypto:hash(sha256, [Head, integer_to_binary(N)]),
-case Digest of
-    <<0:ZeroBits, _/bitstring>> -> Report(...);   % astronomically rare
-    _                           -> ok
-end
-```
-
-The original implementation hex-encoded every candidate and compared the first K characters as
-a string, allocating a 64-byte binary and a 64-element list on every attempt. Hex encoding now
-happens only for digests that actually win. Combined with building the input as iodata rather
-than via `++`, and removing a redundant second hash on each hit, this took throughput from
-**2.6 M to 4.0 M hashes/sec** on the same hardware.
 
 ### Files
 
@@ -333,42 +243,5 @@ On the **worker** laptop:
 The server logs `Worker joined: ...` and its hash rate rises. The worker prints nothing but
 diagnostics.
 
-### Things that actually go wrong
-
-* **Campus Wi-Fi.** University networks commonly isolate clients from each other, so the two
-  laptops cannot open a TCP connection at all regardless of firewall settings. A **phone
-  hotspot** sidesteps this entirely and is the recommended way to demo.
-* **Network profile.** The firewall rules are added for the Private and Domain profiles. If
-  Windows has the Wi-Fi marked *Public*, change it in Settings → Network, or the rules will
-  not apply.
-* **Wrong IP.** A laptop with WSL, Docker, VirtualBox or Hyper-V has several IPv4 addresses.
-  The server prefers ordinary `192.168.x.x` / `10.x.x.x` LAN ranges, prints the one it picked,
-  and accepts an override as its third argument (`.\mine.bat 6 300 192.168.1.7`) if it still guesses
-  wrong.
-* **epmd.** Distribution needs the Erlang port mapper daemon on TCP 4369. The VM starts it
-  automatically only when a node name is passed on the command line, and the documented manual
-  workaround `epmd -daemon` silently fails to stay resident on Windows. `app.erl` therefore
-  starts epmd itself, by briefly running a named VM, whenever port 4369 is not answering.
-* **Distribution ports.** Erlang normally listens on a random high port, which no fixed
-  firewall rule can cover. This project pins the range to **9100–9110**.
-* **Cookie.** Both machines use the cookie `cop6539`, set programmatically, so there is nothing
-  to configure by hand.
 
 ---
-
-## 10. Requirement checklist
-
-| Requirement | Where |
-|---|---|
-| Actor model only, boss + workers | `actors.erl`; no ETS, no shared state, no other parallelism |
-| Boss assigns ranges, tracks problems | `boss_loop/1`, `NextN` advanced per request |
-| Input is number of zeros on the command line | `.\mine.bat 4` → `app:main(["4"])` |
-| Output `input<TAB>hash`, prefixed by a GatorLink ID | stdout, prefix `ahmedrageebahsan` |
-| Worker mode takes a server address | `.\mine.bat 10.22.13.155` |
-| Workers display nothing; server displays all coins | worker stdout is empty; boss is the only printer |
-| Server mines without workers, accepts them as they arrive | local miners start immediately; joins are handled at any time |
-| Work-unit size and how it was determined | §3 |
-| Result for input 4 | §4 |
-| CPU / REAL ratio | §5 — **10.93** |
-| Coin with the most zeros | §6 |
-| Largest number of machines | §7 |
