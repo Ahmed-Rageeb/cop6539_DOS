@@ -1,16 +1,14 @@
-# Compiled Erlang bytecode -- rebuild with Project1/build.bat
+# Compiled Erlang bytecode -- rebuild with build.bat
 *.beam
 
 # Crash dumps
 erl_crash.dump
 
-# Mining output
+# Project 1 mining output
 coins.txt
+coins_*.txt
 
-# Local test scratch
+# Local run scratch
 *.out
 *.err
 *.log
-
-# Ad-hoc run captures
-coins_*.txt

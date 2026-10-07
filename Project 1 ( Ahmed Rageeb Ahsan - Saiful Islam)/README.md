@@ -103,10 +103,6 @@ that the single-machine benchmark cannot show:
 * **Bounded loss.** If a worker laptop is closed mid-chunk, at most 10,000 candidates are
   wasted rather than millions.
 
-The cost of a smaller unit is more network round trips. At 30 ms of work per request against a
-LAN round trip of roughly 1 ms, that is about 3% overhead — comfortably paid for by the better
-balance.
-
 ---
 
 ## 4. Result of running the program for input 4
@@ -172,11 +168,10 @@ whole run. The remaining gap from 12.0 is the usual SMT ceiling: two threads on 
 core do not deliver two cores' worth of throughput on a compute-bound integer workload like
 SHA-256.
 
-A note on honesty in this measurement: the ratio is computed from **the server VM's own CPU
+The ratio is computed from **the server VM's own CPU
 time**, so it describes parallelism *on the machine running the boss*. When remote workers are
 attached, their CPU is not counted and the ratio therefore *understates* the total work being
-done. For the distributed case the meaningful figure is aggregate hash rate plus the per-machine
-breakdown, both of which the summary also prints.
+done.
 
 ---
 
@@ -197,23 +192,6 @@ launched with.
 For scale, at the measured ~4 M hashes/sec a single laptop expects one 7-zero coin roughly
 every 66 seconds, one 8-zero coin every ~18 minutes, and one 9-zero coin every ~4.7 hours.
 
-### Searching further than one run can reach
-
-By default a run always starts at candidate 0, which keeps results reproducible — `.\mine.bat 4`
-always finds `ahmedrageebahsan;47622` first. The consequence is that a second run re-covers
-exactly the ground the first one already searched, so simply running again finds nothing new.
-
-To push deeper into the space, resume past the last run:
-
-```
-.\mine.bat 7 2700 start=6745370000
-```
-
-The full run summary and all 35 coins from the record run are in
-[`results/`](results/).
-
----
-
 ## 7. Largest number of machines
 
 **2 machines** (two Windows laptops on the same LAN), with 12 miner actors on each, 24 miner
@@ -229,30 +207,6 @@ Hash rate:     4.52M hashes/sec
 Per machine:
   boss@192.168.1.124                    125.30M hashes (79.2%)
   worker69189@192.168.1.124              33.00M hashes (20.8%)
-```
-
----
-
-## 8. How it works
-
-### Architecture
-
-```
-                    ┌────────────────────────────┐
-                    │   BOSS  (registered `boss`)│
-                    │  owns NextN, hands out     │
-                    │  disjoint ranges,          │
-                    │  prints every coin         │
-                    └────────────────────────────┘
-                       ▲   │            ▲     │
-      {request_work}   │   │ {work,…}   │     │
-      {coin_found}     │   ▼            │     ▼
-      {chunk_done}  ┌──────────┐     ┌──────────┐
-                    │ miners × │     │ miners × │
-                    │ 12       │     │ 12       │
-                    │ (server) │     │ (worker  │
-                    └──────────┘     │  laptop) │
-                                     └──────────┘
 ```
 
 ### Location transparency
@@ -332,43 +286,3 @@ On the **worker** laptop:
 
 The server logs `Worker joined: ...` and its hash rate rises. The worker prints nothing but
 diagnostics.
-
-### Things that actually go wrong
-
-* **Campus Wi-Fi.** University networks commonly isolate clients from each other, so the two
-  laptops cannot open a TCP connection at all regardless of firewall settings. A **phone
-  hotspot** sidesteps this entirely and is the recommended way to demo.
-* **Network profile.** The firewall rules are added for the Private and Domain profiles. If
-  Windows has the Wi-Fi marked *Public*, change it in Settings → Network, or the rules will
-  not apply.
-* **Wrong IP.** A laptop with WSL, Docker, VirtualBox or Hyper-V has several IPv4 addresses.
-  The server prefers ordinary `192.168.x.x` / `10.x.x.x` LAN ranges, prints the one it picked,
-  and accepts an override as its third argument (`.\mine.bat 6 300 192.168.1.7`) if it still guesses
-  wrong.
-* **epmd.** Distribution needs the Erlang port mapper daemon on TCP 4369. The VM starts it
-  automatically only when a node name is passed on the command line, and the documented manual
-  workaround `epmd -daemon` silently fails to stay resident on Windows. `app.erl` therefore
-  starts epmd itself, by briefly running a named VM, whenever port 4369 is not answering.
-* **Distribution ports.** Erlang normally listens on a random high port, which no fixed
-  firewall rule can cover. This project pins the range to **9100–9110**.
-* **Cookie.** Both machines use the cookie `cop6539`, set programmatically, so there is nothing
-  to configure by hand.
-
----
-
-## 10. Requirement checklist
-
-| Requirement | Where |
-|---|---|
-| Actor model only, boss + workers | `actors.erl`; no ETS, no shared state, no other parallelism |
-| Boss assigns ranges, tracks problems | `boss_loop/1`, `NextN` advanced per request |
-| Input is number of zeros on the command line | `.\mine.bat 4` → `app:main(["4"])` |
-| Output `input<TAB>hash`, prefixed by a GatorLink ID | stdout, prefix `ahmedrageebahsan` |
-| Worker mode takes a server address | `.\mine.bat 10.22.13.155` |
-| Workers display nothing; server displays all coins | worker stdout is empty; boss is the only printer |
-| Server mines without workers, accepts them as they arrive | local miners start immediately; joins are handled at any time |
-| Work-unit size and how it was determined | §3 |
-| Result for input 4 | §4 |
-| CPU / REAL ratio | §5 — **10.93** |
-| Coin with the most zeros | §6 |
-| Largest number of machines | §7 |
