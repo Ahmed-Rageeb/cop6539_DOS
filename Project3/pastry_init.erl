@@ -6,5 +6,6 @@ pastryInit(Credentials, Application) ->
     Pid = pastry_node:start(#{id => NodeId,
                        app => Application,
                        bootstrap => maps:get(bootstrap, Credentials, none),
-                       notify => maps:get(notify, Credentials)}),
+                       notify => maps:get(notify, Credentials),
+                       opts => maps:get(opts, Credentials, #{})}),
     {NodeId, Pid}.
