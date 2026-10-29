@@ -1,28 +1,17 @@
-%%%-------------------------------------------------------------------
-%%% @doc COP6539 Project 3 -- turns the experiment CSVs into reports.
-%%%
-%%%   results/Report.html        hops versus network size
-%%%   results/Report-bonus.html  the failure models
-%%%
-%%% Charts are static inline SVG -- no JavaScript, no CDN, no library --
-%%% because the HTML is printed to PDF by headless Edge and a static document
-%%% is the only thing guaranteed to survive that trip intact.
-%%%
-%%% Every number quoted in the prose is computed from the CSV when the report
-%%% is generated, never typed in, so the text cannot drift from the data.
-%%% @end
-%%%-------------------------------------------------------------------
+%% Makes results/Report.html and results/Report-bonus.html from the CSVs.
+%% report.bat then prints them to PDF with Edge. The charts are plain SVG so
+%% they print without any JavaScript. Numbers in the text come from the CSV.
 -module(report).
 
 -export([main/0, main/1]).
 
-%% `erl -run report main` with no arguments calls main/0, not main([]).
+%% erl -run with no arguments calls main/0
 main() -> main([]).
 
 -define(CORE_CSV,  "results/project3.csv").
 -define(BONUS_CSV, "results/project3_bonus.csv").
 
-%% Categorical slots 1-4 of the reference palette, always in this order.
+%% series colours, always used in this order
 -define(C1, "#2a78d6").
 -define(C2, "#eb6834").
 -define(C3, "#1baf7a").
@@ -54,10 +43,6 @@ write(File, Body) ->
     ok = file:write_file(File, unicode:characters_to_binary(
                                  [head(), Body, "</body></html>"])).
 
-%%====================================================================
-%% CSV and aggregation
-%%====================================================================
-
 read_csv(File) ->
     case file:read_file(File) of
         {error, _} -> [];
@@ -68,8 +53,7 @@ read_csv(File) ->
              || R <- Rows, string:trim(R) =/= ""]
     end.
 
-%% string:to_float("50") is {error, no_float}, which a bare {F, _} pattern
-%% happily matches -- so both arms check the type they actually got.
+%% string:to_float("50") returns {error, no_float}, so check the type
 num(S) ->
     case string:to_float(S) of
         {F, _} when is_float(F) -> F;
@@ -110,12 +94,8 @@ pct(Rows, Model, Defence, Param) ->
 
 fmt(F) -> io_lib:format("~.1f", [F]).
 
-%%====================================================================
-%% Chart
-%%====================================================================
-
-%% Spec: title, sub, xlabel, ylabel, xlog (bool), ymax, yticks, xticks,
-%% series :: [{Label, Colour, Points}], ref :: none | {Label, Points}.
+%% Line chart. Spec has title, sub, xlabel, ylabel, xlog, ymax, yticks,
+%% xticks, series [{Label, Colour, Points}] and an optional ref line.
 chart(#{series := Series} = Spec) ->
     #{title := Title, sub := Sub, xlabel := XL, ylabel := YL,
       xlog := XLog, ymax := YMax, yticks := YT, xticks := XT} = Spec,
@@ -132,7 +112,7 @@ chart(#{series := Series} = Spec) ->
     ["<figure class=\"chart\"><figcaption><h3>", Title, "</h3><p>", Sub,
      "</p></figcaption><svg viewBox=\"0 0 ", integer_to_list(?W), " ",
      integer_to_list(?H), "\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\">",
-     %% recessive grid and axis labels
+     %% grid and axis labels
      [["<line x1=\"", f(?ML), "\" x2=\"", f(?W - ?MR), "\" y1=\"", f(SY(Y)),
        "\" y2=\"", f(SY(Y)), "\" stroke=\"", ?GRID, "\"/>",
        "<text x=\"", f(?ML - 9), "\" y=\"", f(SY(Y) + 4),
@@ -148,7 +128,7 @@ chart(#{series := Series} = Spec) ->
      "<text transform=\"translate(15,", f((?MT + ?H - ?MB) / 2),
      ") rotate(-90)\" text-anchor=\"middle\" font-size=\"11.5\" fill=\"",
      ?INK_MUTED, "\">", YL, "</text>",
-     %% the reference curve is an annotation, not a data series: muted and dashed
+     %% reference line, drawn dashed in grey
      case Ref of
          none -> [];
          {_, RP} -> ["<polyline fill=\"none\" stroke=\"", ?INK_MUTED,
@@ -158,11 +138,11 @@ chart(#{series := Series} = Spec) ->
      [["<polyline fill=\"none\" stroke=\"", C, "\" stroke-width=\"2\" "
        "stroke-linejoin=\"round\" stroke-linecap=\"round\" points=\"",
        pts(P, SX, SY), "\"/>",
-       %% a 2px surface ring keeps markers legible where lines cross
+       %% white ring around markers so they stay visible where lines cross
        [["<circle cx=\"", f(SX(X)), "\" cy=\"", f(SY(Y)), "\" r=\"4\" fill=\"", C,
          "\" stroke=\"", ?SURFACE, "\" stroke-width=\"2\"/>"] || {X, Y} <- P]]
       || {_, C, P} <- Series],
-     %% direct labels at each line's end, pushed apart where they would collide
+     %% labels at the end of each line, moved apart if they overlap
      direct_labels(Labels, SX, SY),
      "</svg></figure>"].
 
@@ -197,18 +177,13 @@ thou(N) when is_integer(N) ->
 group([A, B, C, D | T]) -> [A, B, C, $, | group([D | T])];
 group(L) -> L.
 
-%% The label sits in its own element: the key entry is a flex container, so
-%% bare text around a <sub> would become separate flex items, each pushed
-%% apart by the gap -- which rendered "log16(N)" as "log  16  (N)".
+%% Label goes in its own element, otherwise the flex gap splits text around
+%% a <sub> (log16(N) showed up as "log 16 (N)").
 legend(Items) ->
     ["<div class=\"key\">",
      [["<span><i class=\"sw\" style=\"background:", C, "\"></i><b>", L, "</b></span>"]
       || {L, C} <- Items],
      "</div>"].
-
-%%====================================================================
-%% Main report
-%%====================================================================
 
 core_body(Rows) ->
     Pts = core_points(Rows),
@@ -219,17 +194,17 @@ core_body(Rows) ->
                          H =< math:log(N) / math:log(16)]),
     Big = length([x || {N, _, _, _} <- Pts, N >= 100]),
     ["<h1>Pastry: routing hops versus network size</h1>",
-     "<p class=\"sub\">COP6539 Project 3 &middot; Ahmed Rageeb Ahsan, Saiful Islam</p>",
-     "<p>Each peer is one Erlang actor. Every peer makes two lookups for randomly "
-     "chosen stored objects, and the simulator reports how many node-to-node hops "
-     "each lookup travelled before it was delivered. Networks of up to 5,000 nodes "
-     "are averaged over three independent runs; larger ones are single runs.</p>",
+     "<p class=\"sub\">COP6539 Project 3. Ahmed Rageeb Ahsan, Saiful Islam</p>",
+     "<p>Each peer is an Erlang actor. Every peer makes two lookups for random "
+     "stored objects, and we count how many hops each lookup takes before it is "
+     "delivered. Networks of up to 5,000 nodes are averaged over three runs, the "
+     "larger ones are a single run.</p>",
 
      "<h2>Average hops</h2>",
      legend([{"measured", ?C1}, {"log<sub>16</sub>(N)", ?INK_MUTED}]),
      chart(#{title => "Average hops per lookup",
-             sub => "Network size on a logarithmic axis. Pastry's bound is "
-                    "&lceil;log<sub>16</sub>N&rceil;; the dashed line is log<sub>16</sub>N itself.",
+             sub => "Number of nodes is on a log scale. The dashed line is "
+                    "log<sub>16</sub>N, the expected number of hops.",
              xlabel => "number of nodes", ylabel => "average hops",
              xlog => true, ymax => 5.0, yticks => [0, 1, 2, 3, 4, 5],
              xticks => [10, 100, 1000, 10000, 100000],
@@ -237,33 +212,32 @@ core_body(Rows) ->
              ref => {"log<tspan baseline-shift=\"sub\" font-size=\"8\">16</tspan>(N)",
                      [{float(N), math:log(N) / math:log(16)} || {N, _, _, _} <- Pts]}}),
 
-     "<h2>What the measurements show</h2>",
-     "<p><strong>Routing is logarithmic, as Pastry promises.</strong> On a logarithmic "
-     "x-axis the measured curve is a straight line, which is exactly what O(log N) "
-     "looks like. Growing the network ten-thousand-fold, from 10 to ",
-     thou(NMax), " nodes, adds only about three hops.</p>",
-     "<p><strong>It runs slightly under log<sub>16</sub>N.</strong> The average sits at "
-     "or below the dashed line at ",
+     "<h2>Results</h2>",
+     "<p>The number of hops grows with log N, which is what Pastry is supposed to "
+     "give. Since the x axis is on a log scale, this shows up as a straight line. "
+     "Going from 10 nodes to ",
+     thou(NMax), " nodes only adds about three hops.</p>",
+     "<p>From 100 nodes up, the average is at or a little below log<sub>16</sub>N "
+     "at ",
      case Below =:= Big of
          true  -> "every size";
          false -> [integer_to_list(Below), " of the ", integer_to_list(Big), " sizes"]
      end,
-     " from 100 nodes upward. That is expected rather than lucky: log<sub>16</sub>N "
-     "is the number of hops needed to resolve a key one hex digit at a time, but the leaf "
-     "set lets the last few digits be resolved in a single hop, and the Pastry paper reports "
-     "the same effect.</p>",
-     "<p><strong>Every lookup found its object.</strong> ", thou(Found),
-     " of ", thou(Total), " lookups across all runs. Separately, routing was "
-     "checked against an independent oracle &mdash; the true numerically-closest node, "
-     "found by brute force over every node id rather than taken from any node's own "
-     "tables &mdash; and every probe reached it.</p>",
+     ". This makes sense because log<sub>16</sub>N assumes we fix one hex digit "
+     "per hop, but once the key is in range of the leaf set the last few digits are "
+     "done in a single hop. The Pastry paper reports the same thing.</p>",
+     "<p>All lookups found their object, ", thou(Found),
+     " out of ", thou(Total), " over all runs. We also tested the routing on its "
+     "own. For each test key we found the closest node by checking every node id, "
+     "and every lookup ended at that node.</p>",
 
      "<h2>Largest network</h2>",
-     "<p><strong>", thou(NMax), " nodes</strong>: ", thou(FMax),
-     " of ", thou(TMax), " lookups found, averaging ",
-     io_lib:format("~.2f", [HMax]), " hops against log<sub>16</sub>N = ",
-     io_lib:format("~.2f", [math:log(NMax) / math:log(16)]), ". On an 8&nbsp;GB machine "
-     "the limit is the time to join peers one at a time, not memory.</p>",
+     "<p>The largest network we ran had ", thou(NMax), " nodes. ", thou(FMax),
+     " out of ", thou(TMax), " lookups were found, with an average of ",
+     io_lib:format("~.2f", [HMax]), " hops (log<sub>16</sub>N = ",
+     io_lib:format("~.2f", [math:log(NMax) / math:log(16)]), "). On our 8&nbsp;GB "
+     "laptop the limit was the time it takes to join the nodes one by one, not "
+     "memory.</p>",
 
      "<h2>Measurements</h2>",
      "<table><thead><tr><th>Nodes</th><th>Average hops</th><th>log<sub>16</sub>N</th>"
@@ -274,13 +248,8 @@ core_body(Rows) ->
       || {N, H, F, T} <- Pts],
      "</tbody></table>"].
 
-%%====================================================================
-%% Bonus report
-%%====================================================================
-
-%% Measured against the two survival probabilities that bound node death:
-%% a single copy survives with probability 1 - p, and an object on four
-%% nodes is lost only when all four die, so survives with 1 - p^4.
+%% Compare with theory: one copy survives with probability 1 - p, and an
+%% object with four copies survives unless all four die, 1 - p^4.
 kill_theory_table(Rows) ->
     ["<table><thead><tr><th>Nodes killed (p)</th>"
      "<th>Repair only</th><th>1 &minus; p</th>"
@@ -310,150 +279,143 @@ bonus_chart(Rows, Model, Defs, Title, Sub, XLabel, XTicks) ->
 
 bonus_body(Rows) ->
     P = fun(M, D, X) -> fmt(pct(Rows, M, D, X)) end,
-    %% Measured average route length with no failures -- the H in the
-    %% (1 - q)^H prediction, taken from the data rather than assumed.
+    %% average hops with no failures, used for the (1 - q)^H estimate
     H0 = mean([num(maps:get(avg_hops, R)) || R <- Rows,
                maps:get(model, R) =:= "drop", maps:get(defence, R) =:= "none",
                num(maps:get(param, R)) == 0.0]),
     ["<h1>Failure and resilience in Pastry</h1>",
-     "<p class=\"sub\">COP6539 Project 3, bonus &middot; Ahmed Rageeb Ahsan, Saiful Islam</p>",
-     "<p>The main project runs on a network where nothing ever fails. This report adds "
-     "the three failures the assignment names, implements the recovery mechanisms the "
-     "Pastry paper describes, and measures which mechanism defends against which "
-     "failure. Every experiment uses 1,000 nodes making three lookups each, repeated "
-     "three times; each point is the mean.</p>",
+     "<p class=\"sub\">COP6539 Project 3, bonus. Ahmed Rageeb Ahsan, Saiful Islam</p>",
+     "<p>In the main project nothing ever fails. For the bonus we added the three "
+     "failures from the assignment, implemented the recovery methods described in the "
+     "Pastry paper, and measured which method helps against which failure. All "
+     "experiments use 1,000 nodes that each make three lookups. Every point is the "
+     "average of three runs.</p>",
 
-     "<h2>How resilience was tested</h2>",
-     "<p><strong>The failure models.</strong> All three strike after the network is "
-     "built and its objects stored, so what is measured is whether lookups survive a "
-     "failing system. Each is driven by a single parameter.</p>",
+     "<h2>How we tested resilience</h2>",
+     "<p><b>Failure models.</b> All three start after the network is built and the "
+     "objects are stored, so we are measuring whether lookups still work while things "
+     "fail. Each one is controlled by one parameter.</p>",
      "<ul>",
-     "<li><code>kill=p</code> &mdash; <strong>a node dies.</strong> A fraction <em>p</em> "
-     "of peers is killed outright, with no warning to anyone, as the lookups begin. "
-     "Anything in flight to them is lost.</li>",
-     "<li><code>drop=q</code> &mdash; <strong>a connection dies temporarily.</strong> "
-     "Each transmission is lost independently with probability <em>q</em>; the same "
-     "link may well work on the next attempt.</li>",
-     "<li><code>links=r</code> &mdash; <strong>a connection dies permanently.</strong> "
-     "A fraction <em>r</em> of node pairs cannot reach each other for the whole run. "
-     "Whether a link is dead is a pure function of its two endpoints, so every node "
-     "agrees on it without any coordination, and retrying it never succeeds.</li>",
+     "<li><code>kill=p</code>: <b>a node dies.</b> A fraction <em>p</em> of the "
+     "peers is killed with no warning when the lookups start. Any message on its way "
+     "to them is lost.</li>",
+     "<li><code>drop=q</code>: <b>a connection dies temporarily.</b> Each message "
+     "is lost with probability <em>q</em>, so the same link can work on the next "
+     "try.</li>",
+     "<li><code>links=r</code>: <b>a connection dies permanently.</b> A fraction "
+     "<em>r</em> of node pairs can never reach each other. We decide this by hashing "
+     "the two node ids, so all nodes agree on it without sharing anything, and a dead "
+     "link stays dead on every retry.</li>",
      "</ul>",
-     "<p><strong>The defences.</strong> Each follows the Pastry paper (section 2.5) or "
-     "PAST, the storage system built on it, and each can be switched on independently "
-     "so its contribution can be measured on its own.</p>",
+     "<p><b>Defences.</b> These follow section 2.5 of the Pastry paper, plus "
+     "replication from PAST. Each one can be turned on separately so we can see what "
+     "it adds.</p>",
      "<ul>",
-     "<li><strong>Failure detection</strong> &mdash; every node monitors the nodes in its "
-     "leaf set and routing table. An Erlang monitor is the runtime's version of the "
-     "keep-alive messages Pastry's leaf-set members exchange.</li>",
-     "<li><strong>Repair</strong> &mdash; on a leaf-set failure, ask the farthest live "
-     "leaf on that side for its leaf set; on a routing-table failure, ask another entry "
-     "in the same row for its entry. Both are the paper's own procedures.</li>",
-     "<li><strong>Replication</strong> &mdash; each object is stored on the four nodes "
-     "closest to its key, as PAST does, so it outlives the death of any one of them.</li>",
-     "<li><strong>Retry</strong> &mdash; every lookup carries a timeout; a lookup that "
-     "times out or reaches a node without the object is retried, up to three attempts "
-     "in all, along either the same route or a randomised one.</li>",
+     "<li><b>Failure detection:</b> each node monitors the nodes in its leaf set and "
+     "routing table. We use Erlang monitors for this instead of the keep-alive "
+     "messages in the paper.</li>",
+     "<li><b>Repair:</b> when a leaf set node fails, ask the farthest live leaf on "
+     "that side for its leaf set. When a routing table entry fails, ask another node "
+     "in the same row for its entry. Both come from the paper.</li>",
+     "<li><b>Replication:</b> each object is stored on the four nodes closest to its "
+     "key, like PAST does, so it survives if one of them dies.</li>",
+     "<li><b>Retry:</b> each lookup has a timeout. If it times out, or reaches a node "
+     "that doesn't have the object, it is retried up to three times in total, either "
+     "on the same route or on a random one.</li>",
      "</ul>",
-     "<p><strong>Checking the checks.</strong> Every request is counted exactly once: "
-     "found, not found, or given up on after its last timeout. A late reply to an "
-     "attempt already retried is recognised by its reference and ignored, so no request "
-     "can be counted twice. Randomised routing was verified separately against a "
-     "brute-force oracle and reaches the true closest node every time.</p>",
+     "<p>Each request is counted exactly once, as found, not found, or failed after "
+     "its last timeout. If a late reply comes back for an attempt we already retried, "
+     "we ignore it, so nothing is counted twice. We also checked the random routing "
+     "against the brute force closest node, and it always reached the right one.</p>",
 
      "<h2>1. A node dies</h2>",
      legend([{L, C} || {_, L, C} <- kill_defences()]),
      bonus_chart(Rows, "kill", kill_defences(), "Node death",
-                 "Defences added one at a time, each line including all the ones before it.",
+                 "Each line includes the defences of the lines before it.",
                  "fraction of nodes killed (p)", [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),
-     "<p><strong>Repair fixes routing; it cannot bring back data.</strong> At p = 0.2 "
-     "lookups succeed ", P("kill", "none", 0.2), "% of the time with no defence, and "
-     "repair raises that to ", P("kill", "repair", 0.2), "%. What it leaves behind is "
-     "telling: the remaining loss equals the fraction of nodes killed, at every value "
-     "of p (table below). Those are objects whose only copy lived on a dead node. Once "
-     "routing is repaired, a lookup arrives at exactly the right place and finds "
-     "nothing there &mdash; and no improvement to routing can change that.</p>",
-     "<p><strong>Replication is what saves the data.</strong> It lifts p = 0.2 to ",
-     P("kill", "replicas", 0.2), "% and still holds ", P("kill", "replicas", 0.5),
-     "% when half the network dies. Retry then adds more than might be expected, up to ",
-     P("kill", "retry", 0.5), "% at p = 0.5, by recovering lookups that set off in the "
-     "brief window before repair completed.</p>",
-     "<p><strong>With every defence on, the system reaches its theoretical "
-     "floor.</strong> An object stored on four nodes is lost only if all four die, "
-     "which happens with probability p<sup>4</sup>. The fully defended curve sits on "
-     "1&nbsp;&minus;&nbsp;p<sup>4</sup> almost exactly: the only lookups that still fail "
-     "are for objects no mechanism could possibly have saved. Likewise repair alone "
-     "sits on 1&nbsp;&minus;&nbsp;p, the survival rate of a single copy.</p>",
+     "<p><b>Repair fixes the routing but can't bring back lost data.</b> At p = 0.2, ",
+     P("kill", "none", 0.2), "% of lookups succeed with no defence, and repair "
+     "brings this up to ", P("kill", "repair", 0.2), "%. The loss that remains is "
+     "about the same as the fraction of nodes killed, at every value of p (see the "
+     "table below). These are objects whose only copy was on a node that died. After "
+     "repair the lookup goes to the right node, but the object is not there, and "
+     "better routing can't fix that.</p>",
+     "<p><b>Replication is what keeps the data.</b> With it, p = 0.2 goes up to ",
+     P("kill", "replicas", 0.2), "%, and it is still ", P("kill", "replicas", 0.5),
+     "% when half of the nodes die. Adding retry helps more than we expected, up to ",
+     P("kill", "retry", 0.5), "% at p = 0.5. It catches lookups that were sent in the "
+     "short time before repair finished.</p>",
+     "<p><b>With all defences on, we get close to the best possible result.</b> An "
+     "object with four copies is only lost if all four nodes die, which happens with "
+     "probability p<sup>4</sup>. The measured curve is very close to "
+     "1&nbsp;&minus;&nbsp;p<sup>4</sup>, so the lookups that still fail are for objects "
+     "that could not have been saved. In the same way, repair alone follows "
+     "1&nbsp;&minus;&nbsp;p, which is the chance that a single copy survives.</p>",
      kill_theory_table(Rows),
-     "<p>The two mechanisms answer different questions &mdash; repair asks <em>can the "
-     "message get there</em>, replication asks <em>is anything there to find</em> "
-     "&mdash; and surviving node death needs both.</p>",
+     "<p>So repair and replication solve two different problems. Repair makes sure "
+     "the message can get to the right node, and replication makes sure the object "
+     "is still there. To handle node death we need both.</p>",
 
      "<h2>2. A connection dies temporarily</h2>",
      legend([{L, C} || {_, L, C} <- retry_policies()]),
      bonus_chart(Rows, "drop", retry_policies(), "Temporary connection failure",
-                 "Each transmission independently lost with probability q.",
-                 "probability a transmission is lost (q)", [0.0, 0.1, 0.2, 0.3]),
-     "<p>A lookup crosses about ", io_lib:format("~.2f", [H0]), " links and losing any "
-     "one loses it, so it should survive with probability (1&nbsp;&minus;&nbsp;q)<sup>",
-     io_lib:format("~.2f", [H0]), "</sup>. At q = 0.2 that predicts ",
-     fmt(100 * math:pow(0.8, H0)), "%; measured, ", P("drop", "none", 0.2), "%.</p>",
-     "<p>Retrying fixes most of it, and here <strong>retrying the same route is "
-     "best</strong> &mdash; at every value of q: ", P("drop", "det", 0.2),
-     "% against ", P("drop", "rand", 0.2), "% for a random route at q = 0.2. Each "
-     "attempt along the same short route is an independent draw, so three attempts "
-     %% Three decimals: rounded to one, the base would print as 0.6 and the
-     %% formula on the page would disagree with the result printed after it.
-     "should leave only (1&nbsp;&minus;&nbsp;", io_lib:format("~.3f", [math:pow(0.8, H0)]),
+                 "Each message is lost with probability q.",
+                 "probability a message is lost (q)", [0.0, 0.1, 0.2, 0.3]),
+     "<p>A lookup takes about ", io_lib:format("~.2f", [H0]), " hops, and if any of "
+     "them is lost the lookup fails. So we expect it to succeed with probability "
+     "(1&nbsp;&minus;&nbsp;q)<sup>",
+     io_lib:format("~.2f", [H0]), "</sup>. For q = 0.2 that gives ",
+     fmt(100 * math:pow(0.8, H0)), "%, and we measured ", P("drop", "none", 0.2), "%.</p>",
+     "<p>Retrying fixes most of this, and here <b>retrying on the same route works "
+     "best</b>, for every value of q. At q = 0.2 it gets ", P("drop", "det", 0.2),
+     "%, against ", P("drop", "rand", 0.2), "% for a random route. Each try on the "
+     "same route fails independently, so after three tries we expect "
+     %% 3 decimals, with 1 it shows 0.6 and the formula looks wrong
+     "(1&nbsp;&minus;&nbsp;", io_lib:format("~.3f", [math:pow(0.8, H0)]),
      ")<sup>3</sup> "
-     "of lookups failing, a predicted ", fmt(100 * (1 - math:pow(1 - math:pow(0.8, H0), 3))),
-     "%. A randomised route is slightly longer, and every extra hop is another chance "
-     "to be lost.</p>",
+     "of lookups to fail, which predicts ", fmt(100 * (1 - math:pow(1 - math:pow(0.8, H0), 3))),
+     "%. A random route is a bit longer, and every extra hop is another chance to "
+     "lose the message.</p>",
 
      "<h2>3. A connection dies permanently</h2>",
      legend([{L, C} || {_, L, C} <- retry_policies()]),
      bonus_chart(Rows, "links", retry_policies(), "Permanent connection failure",
-                 "A fraction r of node pairs cannot communicate for the whole run.",
-                 "fraction of links permanently down (r)", [0.0, 0.1, 0.2, 0.3]),
-     "<p>Here the ranking <strong>inverts</strong>. Retrying the same route is "
-     "worthless: ", P("links", "det", 0.2), "% at r = 0.2, against ",
-     P("links", "none", 0.2), "% with no retry at all &mdash; the two lines lie on top "
-     "of each other at every value of r. Pastry's routing is deterministic, so the same "
-     "lookup from the same node takes the same path, straight back into the same dead "
-     "link, and three attempts fail exactly as one did. Only a <strong>randomised</strong> "
-     "route escapes it, reaching ", P("links", "rand", 0.2), "%. This is why the Pastry "
-     "paper suggests randomising retries.</p>",
+                 "A fraction r of node pairs can never communicate.",
+                 "fraction of links that are dead (r)", [0.0, 0.1, 0.2, 0.3]),
+     "<p>Here it is the other way around. Retrying on the same route does not help "
+     "at all: ", P("links", "det", 0.2), "% at r = 0.2, compared to ",
+     P("links", "none", 0.2), "% with no retry. The two lines are on top of each "
+     "other for every value of r. Pastry always picks the same next hop for a key, "
+     "so a retry from the same node goes the same way and hits the same dead link "
+     "again. Only a <b>random</b> route gets around it, and that gets ",
+     P("links", "rand", 0.2), "%. This is why the Pastry paper suggests randomizing "
+     "the route when retrying.</p>",
 
-     "<h2>Findings</h2>",
-     "<div class=\"note\"><p><strong>No single retry policy is best, and a node cannot "
-     "tell which one it needs.</strong> The same-route retry that wins against temporary "
-     "failure is the one that fails against permanent failure, and the reverse. A node "
-     "whose lookup times out cannot tell which kind of failure lost it.</p>"
-     "<p>The obvious compromise &mdash; retry the same route once, then randomise "
-     "&mdash; was tested as <em>hybrid</em>, and it is never the best at anything. It "
-     "lies strictly between the two pure policies at every one of the eight failure "
-     "levels tested; at 20% it reaches ", P("drop", "hybrid", 0.2), "% against "
-     "temporary loss and ", P("links", "hybrid", 0.2), "% against permanent loss. With "
-     "three attempts, spending one on the same route is one attempt wasted whenever "
-     "the failure is permanent.</p>"
-     "<p>So the simulator defaults to the randomised retry, the policy with the best "
-     "worst case. It gives up a little against temporary failure to avoid failing badly "
-     "against permanent failure &mdash; the right trade when the kind of failure is "
-     "unknown.</p></div>",
-     "<p><strong>Every failure mode needed its own defence.</strong> Node death was "
-     "survivable only with replication; temporary loss only with retry; permanent link "
-     "loss only with <em>randomised</em> retry. Pastry's resilience is not one property "
-     "but several separate mechanisms, each covering one way of failing.</p>",
+     "<h2>Conclusion</h2>",
+     "<div class=\"note\"><p><b>No retry policy is best for both kinds of connection "
+     "failure, and a node can't tell which one it is dealing with.</b> Retrying on the "
+     "same route is best for temporary failures but useless for permanent ones, and "
+     "the random route is the opposite. When a lookup times out, the node doesn't know "
+     "which kind of failure caused it.</p>"
+     "<p>We also tried a mix, called <em>hybrid</em> in the charts: retry the same "
+     "route once, then use random routes. It was never the best. It was always "
+     "between the other two, at all eight failure levels we tested. At 20% it got ",
+     P("drop", "hybrid", 0.2), "% for temporary failures and ", P("links", "hybrid", 0.2),
+     "% for permanent ones. With only three attempts, using one on the same route "
+     "wastes it when the link is dead for good.</p>"
+     "<p>Because of this the program uses random routes for retries by default. It "
+     "has the best worst case: it loses a little on temporary failures but does much "
+     "better on permanent ones, which is what we want when we don't know the type of "
+     "failure.</p></div>",
+     "<p>Overall, each type of failure needed its own fix. Node death needed "
+     "replication, temporary connection failures needed retry, and permanent "
+     "connection failures needed retry with a <em>random</em> route.</p>",
 
-     "<h2>Reproducing</h2>",
+     "<h2>How to reproduce</h2>",
      "<pre>project3 1000 3 kill=0.2\n"
      "project3 1000 3 kill=0.2 resilient\n"
      "project3 1000 3 drop=0.2 attempts=3 retry=det\n"
      "project3 1000 3 links=0.2 attempts=3 retry=rand</pre>"].
-
-%%====================================================================
-%% Document shell
-%%====================================================================
 
 head() ->
     ["<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",

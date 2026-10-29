@@ -2,14 +2,6 @@
 -export([start/1, loop/1]).
 
 %% One actor per Pastry peer.
-%%
-%% The join protocol, routing and object store are unchanged from the
-%% original. Additions, each explained where it appears:
-%%   * requests carry a reference and a timeout, so every request ends in
-%%     exactly one reported result even if its reply is lost
-%%   * idle actors hibernate, which keeps the network's memory bounded
-%%   * failure detection and the repair procedures of the Pastry paper,
-%%     section 2.5 (bonus; off unless `repair' is set)
 
 -define(IDLE_MS, 2000).
 
@@ -63,16 +55,13 @@ loop(State) ->
                     hops => 0},
             loop(route:route(Msg, Key, State));
 
-        %% The keys in play are hash({object, K}) for K in 1..NumKeys, so a
-        %% peer needs only the count to pick one. Sending every peer the list
-        %% of keys instead -- which is what this message originally did --
-        %% costs O(N^2) memory, because Erlang copies terms on send: measured
-        %% at 4,000 nodes it added 785 MB, and 10,000 nodes ran out of memory.
+        %% Keys are hash({object, K}) for K in 1..NumKeys, so we only need the
+        %% count. Sending the whole key list to every peer used O(N^2) memory.
         {start_requests, NumKeys, NumRequests} ->
             self() ! {tick, NumKeys, 1, NumRequests},
             loop(State);
 
-        %% One request per second, as the assignment specifies.
+        %% one request per second
         {tick, NumKeys, Seq, NumRequests} ->
             Key = pastry_util:hash({object, rand:uniform(NumKeys)}),
             S1 = send_lookup(Key, 1, State),
@@ -89,7 +78,7 @@ loop(State) ->
         {lookup_timeout, Ref} ->
             loop(on_timeout(Ref, State));
 
-        %% ---- bonus: replication, failure detection and repair ----
+        %% bonus: replication, failure detection and repair
 
         {replica, Key, Value} ->
             Store = maps:get(store, State),
@@ -116,12 +105,8 @@ loop(State) ->
             loop(learn(Nodes, State))
 
     after ?IDLE_MS ->
-        %% Idle for two seconds: compact. Hibernating garbage-collects the
-        %% heap down to the live state, and the actor sleeps until the next
-        %% message arrives. An idle actor blocked in receive never collects
-        %% on its own, so without this the garbage left by join traffic stays
-        %% resident: measured at 79 KB per node, against 9 KB with it -- the
-        %% difference between topping out near 5,000 nodes and passing 50,000.
+        %% An idle actor never garbage collects on its own, so the garbage
+        %% from join traffic would stay around. Hibernating compacts the heap.
         erlang:hibernate(?MODULE, loop, [State])
     end.
 
@@ -131,23 +116,15 @@ finish_join(State) ->
     maps:get(notify, State) ! {joined, Id},
     maps:without([join_recv, join_expected], State).
 
-%%====================================================================
-%% Learning about other nodes
-%%====================================================================
-
-%% Everything a node learns goes through here. A node already known to have
-%% failed is never re-admitted: a neighbour answering a repair request may
-%% not have noticed the failure yet, and would otherwise hand the dead node
-%% straight back.
+%% Skip nodes we already know are dead. A neighbour answering a repair
+%% request may not have noticed the failure yet.
 learn(Nodes, State) ->
     Dead = maps:get(dead, State),
     Live = [N || {Id, _} = N <- Nodes, not maps:is_key(Id, Dead)],
     watch(node_state:learn(Live, State)).
 
-%% Failure detection (bonus). Pastry has leaf-set members exchange
-%% keep-alive messages; an Erlang monitor is the runtime's own version of
-%% exactly that, delivering 'DOWN' when the watched process dies. Only on
-%% when repair is enabled, so the main project pays nothing for it.
+%% Monitor every node in our tables so we get a 'DOWN' when one dies. This
+%% stands in for the keep-alive messages in the paper. Only used with repair on.
 watch(State) ->
     case repair_on(State) of
         false -> State;
@@ -166,10 +143,7 @@ watch(State) ->
 repair_on(State) ->
     maps:get(repair, maps:get(opts, State), false) =:= true.
 
-%%====================================================================
-%% Repair after a node failure (bonus) -- Pastry paper, section 2.5
-%%====================================================================
-
+%% Repair after a node failure, following section 2.5 of the paper.
 on_down(Pid, State) ->
     case maps:take(Pid, maps:get(monitored, State)) of
         error -> State;
@@ -186,11 +160,8 @@ on_down(Pid, State) ->
             S1
     end.
 
-%% "To replace a failed node in the leaf set, its neighbour in the nodeId
-%% space contacts the live node with the largest index on the side of the
-%% failed node, and asks that node for its leaf table." That node's leaf set
-%% extends beyond ours on exactly the side we just lost a member from, so it
-%% knows the candidates to take the failed node's place.
+%% Ask the farthest live leaf on the side that lost a node for its leaf set.
+%% Its leaf set reaches further on that side, so it knows a replacement.
 repair_leaf_set(Id, Sm0, La0, State) ->
     {Sm, La} = maps:get(leaf_set, State),
     [ask_leaf_set(Side, State)
@@ -198,7 +169,7 @@ repair_leaf_set(Id, Sm0, La0, State) ->
     ok.
 
 ask_leaf_set([], State) ->
-    %% The whole side failed. Ask whoever we still know of.
+    %% whole side is gone, ask anyone we still know
     case node_state:known(State) of
         []           -> ok;
         [{_, P} | _] -> P ! {leafset_request, self()}
@@ -207,11 +178,8 @@ ask_leaf_set(Side, _State) ->
     {_, Farthest} = lists:last(Side),
     Farthest ! {leafset_request, self()}.
 
-%% "To repair a failed routing table entry R[l][d], a node contacts first
-%% the node referred to by another entry R[l][i], i /= d, of the same row,
-%% and asks for that node's entry for R[l][d]." Every node in row l shares
-%% the first l digits with us, so its own R[l][d] is a valid R[l][d] for us
-%% too. Two are asked, in case the first has no such entry.
+%% Ask other nodes in the same row for their entry in the empty slot. They
+%% share the same first Row digits with us, so their entry works for us too.
 repair_routing_table(Vacated, State) ->
     Table = maps:get(table, State),
     [P ! {rt_request, Row, Col, self()}
@@ -219,13 +187,7 @@ repair_routing_table(Vacated, State) ->
         {_, P} <- lists:sublist(rtable:row(Row, Table), 2)],
     ok.
 
-%%====================================================================
-%% Lookups: one result per request, with optional retry (bonus)
-%%====================================================================
-
-%% Every lookup carries a reference and arms a timeout. Without this, a
-%% lookup whose message is lost -- to a dead node or a failed link -- would
-%% simply never be heard of again, and nothing could count it as failed.
+%% Each lookup gets a ref and a timeout so a lost lookup still gets reported.
 send_lookup(Key, Attempt, State) ->
     Opts = maps:get(opts, State),
     Ref = make_ref(),
@@ -238,15 +200,13 @@ send_lookup(Key, Attempt, State) ->
 on_result(Ref, Key, Value, Hops, State) ->
     case maps:take(Ref, maps:get(pending, State)) of
         error ->
-            %% A late answer to an attempt that already timed out and was
-            %% retried or given up on. Counting it would count a request twice.
+            %% late reply to an attempt we already retried, ignore it
             State;
         {{_, Attempt}, Pending} ->
             S1 = State#{pending => Pending},
             Found = Value =/= not_found,
             case not Found andalso Attempt < attempts(S1) of
-                %% Reached a node that does not hold the object -- possible
-                %% while leaf sets are still being repaired. Try again.
+                %% can happen while leaf sets are still being repaired
                 true  -> send_lookup(Key, Attempt + 1, S1);
                 false -> report(Key, Found, Hops, Attempt, S1)
             end
@@ -270,18 +230,9 @@ report(Key, Found, Hops, Attempts, State) ->
 attempts(State) ->
     maps:get(attempts, maps:get(opts, State), 1).
 
-%% How long to wait before declaring a lookup lost.
-%%
-%% Short only when something can actually be lost. In a healthy network no
-%% message ever disappears, so a timeout can only ever produce FALSE
-%% failures -- and it did: with a one-second timeout everywhere, 50,000
-%% nodes reported half their lookups as not found and 100,000 nodes two
-%% thirds, while scratch runs without the timeout found every one. Every
-%% peer fires its first lookup at the same instant, and under that burst
-%% some replies take longer than a second. They were not lost; they were
-%% late, and the late answer was discarded as stale.
-%%
-%% So with no failure model and no retries, the timeout is only a backstop.
+%% Use a short timeout only when messages can actually be lost. With no
+%% failures, a short timeout just marks slow replies as failures on big
+%% networks, so it is only a backstop there.
 lookup_timeout(Opts) ->
     case maps:find(lookup_timeout, Opts) of
         {ok, T} -> T;
@@ -295,25 +246,9 @@ lookup_timeout(Opts) ->
             end
     end.
 
-%% Which route a retry takes. Measured at 1,000 nodes, 20% failure, three
-%% attempts:
-%%
-%%                                  temporary   permanent   worst case
-%%     no retry                         57%         57%         57%
-%%     det:    same route              92%         58%         58%
-%%     rand:   random route            85%         76%         76%
-%%     hybrid: same once, then random  88%         70%         70%
-%%
-%% Against a TEMPORARY failure the same short route is best: each attempt is
-%% an independent draw, and a random route only adds hops, each one another
-%% chance to be lost. Against a PERMANENT failure the same route is useless
-%% -- it walks straight back into the dead link.
-%%
-%% A node cannot tell which kind of failure lost its message, so the
-%% default is the policy with the best worst case, `rand'. The hybrid looked
-%% like it should combine the strengths of both, but measured it is never
-%% best at either: with three attempts, spending one on the same route is
-%% one attempt wasted whenever the failure is permanent.
+%% Route taken by a retry. det = same route, rand = random route,
+%% hybrid = same route once, then random. rand is the default since it does
+%% best when we don't know if a failure is temporary or permanent.
 randomize(det, _Attempt)     -> false;
 randomize(rand, Attempt)     -> Attempt > 1;
 randomize(hybrid, Attempt)   -> Attempt > 2.

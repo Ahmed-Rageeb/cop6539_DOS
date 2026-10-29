@@ -1,16 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @doc COP6539 Project 3 -- experiment harness.
-%%%
-%%% Writes CSV; draws nothing. `report' turns the CSV into the PDFs.
-%%%
-%%%   experiments core N TRIALS   one row per trial: hops at network size N
-%%%   experiments bonus MODEL     one failure model, every parameter and
-%%%                               every defence, three trials each
-%%%
-%%% Driven by run-experiments.sh, which starts a fresh VM per invocation so
-%%% that one failed or exhausted run cannot take the rest down with it.
-%%% @end
-%%%-------------------------------------------------------------------
+%% Experiments for the report. Writes CSV files, report.erl makes the PDFs.
+%%
+%%   experiments core N TRIALS   average hops at network size N
+%%   experiments bonus MODEL     one failure model with every defence
+%%
+%% run-experiments.sh starts a new VM for each of these.
 -module(experiments).
 
 -export([main/1]).
@@ -18,8 +11,7 @@
 -define(CORE_CSV,  "results/project3.csv").
 -define(BONUS_CSV, "results/project3_bonus.csv").
 
-%% The bonus sweeps use a fixed, modest network so the failure parameter
-%% is the only thing that changes between runs.
+%% bonus runs all use the same network size so only the failure rate changes
 -define(BONUS_N, 1000).
 -define(BONUS_REQUESTS, 3).
 -define(BONUS_TRIALS, 3).
@@ -38,12 +30,8 @@ main(["bonus", Model]) ->
     bonus(list_to_atom(Model)),
     halt(0).
 
-%%====================================================================
-%% Core: average hops as the network grows
-%%====================================================================
-
-%% Two requests per peer is plenty: hops depend on the network, not on how
-%% long it runs, and N * 2 lookups is already 200,000 at the largest size.
+%% Two requests per peer is enough, hops depend on the network size and not
+%% on how long it runs.
 core_trial(N, T) ->
     S = main:run(N, 2, #{}),
     Avg = avg_hops(S),
@@ -53,12 +41,8 @@ core_trial(N, T) ->
     io:format(standard_error, "  N=~-7w trial ~w  ~w/~w found  ~.3f hops~n",
               [N, T, maps:get(found, S), maps:get(total, S), Avg]).
 
-%%====================================================================
-%% Bonus: one failure model at a time
-%%====================================================================
-
-%% Node death, against defences added one at a time, so each step's
-%% contribution is visible on its own.
+%% Node death. Each defence includes the ones before it, so we can see what
+%% each one adds.
 bonus(kill) ->
     Defences = [{"none",     #{}},
                 {"repair",   #{repair => true}},
@@ -66,8 +50,7 @@ bonus(kill) ->
                 {"retry",    #{repair => true, replicas => 4, attempts => 3}}],
     sweep(kill, [0.0, 0.1, 0.2, 0.3, 0.4, 0.5], Defences);
 
-%% Connection failures, against the retry policies. Temporary and permanent
-%% failures reward OPPOSITE policies, which is the point of running both.
+%% Connection failures, against the different retry policies.
 bonus(Model) when Model =:= drop; Model =:= links ->
     Defences = [{"none",   #{}},
                 {"det",    #{attempts => 3, retry => det}},
@@ -90,7 +73,6 @@ point(Model, P, Name, Opts, T) ->
     io:format(standard_error, "  ~s=~.2f ~-9s trial ~w  ~.1f% found~n",
               [atom_to_list(Model), P, Name, T, Pct]).
 
-%%====================================================================
 
 avg_hops(#{replied := 0}) -> 0.0;
 avg_hops(#{replied := R, hop_sum := H}) -> H / R.

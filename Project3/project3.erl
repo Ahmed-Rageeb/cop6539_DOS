@@ -1,28 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @doc COP6539 Project 3 -- command line entry point.
-%%%
-%%%   project3 numNodes numRequests
-%%%
-%%% Builds a Pastry network of numNodes peers, has every peer make
-%%% numRequests lookups at one per second, and prints the average number of
-%%% hops a message travelled to be delivered.
-%%%
-%%% Bonus options (key=value, any position):
-%%%   kill=0.2      20% of the nodes die once the network is built
-%%%   drop=0.1      each transmission is lost with probability 0.1
-%%%   links=0.1     10% of node pairs are permanently unable to communicate
-%%%   repair=1      detect failures and repair leaf sets / routing tables
-%%%   replicas=4    keep each object on the 4 nodes closest to its key
-%%%   attempts=3    retry a failed lookup up to 3 times in total
-%%%   retry=rand    route a retry takes: det, rand (default), or hybrid
-%%%   resilient     shorthand for repair=1 replicas=4 attempts=3
-%%% @end
-%%%-------------------------------------------------------------------
+%% Command line entry point:  project3 numNodes numRequests [options]
+%% See usage/0 for the bonus options.
 -module(project3).
 
 -export([main/0, main/1]).
 
-%% `erl -run project3 main' with no arguments calls main/0, not main([]).
+%% erl -run with no arguments calls main/0
 main() -> usage().
 
 main(Args) ->
@@ -89,8 +71,7 @@ opt("retry", "rand")   -> {ok, retry, rand};
 opt("retry", "hybrid") -> {ok, retry, hybrid};
 opt(_, _)          -> error.
 
-%% string:to_float("5") is {error, no_float}, and a bare {F, _} pattern
-%% would happily bind F to the atom `error' -- so check what came back.
+%% string:to_float("5") returns {error, no_float}, so check the type
 num(V) ->
     case string:to_float(V) of
         {F, ""} when is_float(F) -> F;

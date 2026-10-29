@@ -28,8 +28,8 @@ project3.bat <numNodes> <numRequests>
 
 Example: `project3.bat 100 5`
 
-Or by hand. Every module must be compiled -- `forward.erl` calls `failure.erl`
-on every lookup, so leaving it out builds cleanly and then crashes at run time:
+Or by hand. Make sure to compile every module. `forward.erl` calls `failure.erl`
+on every lookup, so if you leave it out it compiles fine but crashes when run:
 
 ```
 erlc project3.erl main.erl pastry_init.erl pastry_node.erl route.erl deliver.erl forward.erl new_leafs.erl pastry_util.erl rtable.erl node_state.erl failure.erl

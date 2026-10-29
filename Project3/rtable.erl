@@ -17,13 +17,12 @@ get(Row, Col, Table) ->
 nodes(Table) ->
     maps:values(Table).
 
-%% Drop a failed node. Returns the new table and the {Row, Col} slots it
-%% occupied, so the caller knows which entries need repairing.
+%% Remove a failed node. Also returns the slots it was in so they can be
+%% repaired.
 remove(Id, Table) ->
     Vacated = [Slot || {Slot, {I, _}} <- maps:to_list(Table), I =:= Id],
     {maps:without(Vacated, Table), Vacated}.
 
-%% Every entry in one row -- the first place the paper looks for a
-%% replacement when an entry in that row fails.
+%% all entries in one row, used when repairing a slot in that row
 row(Row, Table) ->
     [Node || {{R, _}, Node} <- maps:to_list(Table), R =:= Row].

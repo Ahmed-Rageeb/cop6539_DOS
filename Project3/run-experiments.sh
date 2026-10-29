@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Run every experiment, each in its own Erlang VM.
-#
-# A fresh VM per run means one exhausted or crashed run costs only itself,
-# and every run starts from a clean heap. Results land in results/.
+# Runs all the experiments, each one in a new Erlang VM so a crash only
+# loses that run. Results go to results/
 set -u
 ERL="/c/Program Files/Erlang OTP/bin/erl"
 cd "$(dirname "$0")"

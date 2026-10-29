@@ -2,14 +2,12 @@
 -export([route/3, next_hop/2, random_hop/2]).
 
 
-%% A time-to-live, as IP uses. Healthy routing needs about log16(N) hops --
-%% roughly 4 at N = 100,000 -- so this never fires in normal operation. It
-%% exists so that, under failures, a message routed on stale leaf sets
-%% cannot circulate indefinitely: it is delivered where it stands, and if
-%% that is the wrong node the lookup is honestly reported as not found.
+%% Hop limit, like a TTL. Normal routing takes about log16(N) hops, so this
+%% only matters under failures, where stale leaf sets could make a message
+%% go around in circles.
 -define(MAX_HOPS, 64).
 
-%% How many of the best next hops a randomised retry chooses between.
+%% number of best next hops a randomised retry picks from
 -define(RANDOM_CHOICES, 3).
 
 route(Msg, Key, State) ->
@@ -66,25 +64,14 @@ rare_case(Key, L, Self, State) ->
         _  -> pastry_util:closest(Key, Cands)
     end.
 
-%% Randomised routing, used when a lookup is retried (bonus).
+%% Randomised routing for retries (bonus). Normal routing always picks the
+%% same next hop, so a retry would hit the same dead link again. The paper
+%% suggests retrying through a random node that still makes progress.
 %%
-%% Pastry's routing is deterministic: from a given node, a given key always
-%% takes the same next hop. That is exactly wrong for retrying across a
-%% permanently dead link -- every retry walks straight back into it. The
-%% paper's remedy (section 2.5) is to retry with a randomised choice among
-%% the nodes that still make progress toward the key.
-%%
-%% A candidate makes progress if it either shares a strictly LONGER prefix
-%% with the key (what a routing-table hop does), or shares at least as long
-%% a prefix and is strictly closer numerically (what the rare case does).
-%% Both strictly increase the pair (shared prefix length, -distance), which
-%% is bounded, so the route cannot loop -- randomising the choice changes
-%% the path, never whether it terminates.
-%%
-%% Allowing only "strictly closer" would be wrong: a longer-prefix node is
-%% not necessarily closer numerically (0x0FFF... and the key 0x1000... share
-%% no prefix yet are adjacent), so excluding prefix hops could make a node
-%% deliver a message that should have travelled further.
+%% A node makes progress if it shares a longer prefix with the key, or the
+%% same prefix and is numerically closer. Either way we move forward, so the
+%% route still ends. We need the longer-prefix case too, because a node with
+%% a longer prefix isn't always numerically closer.
 random_hop(Key, State) ->
     Self = maps:get(id, State),
     {Sm, La} = maps:get(leaf_set, State),
@@ -92,7 +79,7 @@ random_hop(Key, State) ->
     Cands =
         case in_leaf_range(Key, Self, Sm, La) of
             true ->
-                %% Final stretch: the closest node is in the leaf set.
+                %% last step, the closest node is in the leaf set
                 [I || {I, _} <- Sm ++ La, Closer(I)];
             false ->
                 L = pastry_util:shl(Self, Key),
@@ -102,20 +89,9 @@ random_hop(Key, State) ->
                           P > L orelse (P >= L andalso Closer(I))
                       end]
         end,
-    %% Choose among the few BEST candidates, not among all of them.
-    %%
-    %% Choosing uniformly among every node that makes any progress was tried
-    %% first and was badly wrong: many qualifying nodes are leaf-set
-    %% neighbours only marginally closer to the key, so a message could crawl
-    %% around the ring one neighbour at a time. Measured at 1,000 nodes, that
-    %% raised the average route from 2.41 hops to 11.11. Since every hop is
-    %% another chance to cross a failed link, the longer route lost far more
-    %% than it gained -- under 20% transient loss, randomised retries
-    %% succeeded LESS often than simply retrying the deterministic route.
-    %%
-    %% Ranking by progress -- longest shared prefix first, then numerically
-    %% closest -- and choosing among the top few keeps routes near-optimal in
-    %% length while still offering alternatives to a link that is down.
+    %% Pick from the top few candidates only. Picking from all of them made
+    %% routes much longer (about 11 hops instead of 2.5 at 1,000 nodes),
+    %% and each extra hop is another chance to lose the message.
     Ranked = lists:sort([{-pastry_util:shl(I, Key), pastry_util:dist(I, Key), I}
                          || I <- lists:usort(Cands)]),
     case lists:sublist(Ranked, ?RANDOM_CHOICES) of

@@ -1,12 +1,9 @@
 -module(main).
 -export([main/1, start/2, start/3, run/3]).
 
-%% The coordinator: builds the network, stores the objects, starts every
-%% peer making requests, and collects the results.
-%%
-%% `start/2' prints, as before. `run/3' does the same work but returns the
-%% statistics and tears the network down afterwards, so the experiment
-%% harness can call it many times in one VM.
+%% Coordinator: builds the network, stores the objects, starts the requests
+%% and collects the results. run/3 returns the stats instead of printing
+%% them, which the experiments use.
 
 main([NodesArg, RequestsArg]) ->
     start(list_to_integer(NodesArg), list_to_integer(RequestsArg));
@@ -28,7 +25,7 @@ run(NumNodes, NumRequests, Opts) ->
 
     insert_objects(Peers, Coordinator),
 
-    %% Bonus: node failure strikes once the network is built and populated.
+    %% bonus: kill nodes after the network is built and the objects stored
     {Alive, Killed} = kill_nodes(Peers, maps:get(kill, Opts, 0.0)),
 
     lists:foreach(fun({_Id, Pid}) ->
@@ -101,9 +98,8 @@ insert_objects(Peers, Coordinator) ->
                   end, Keys),
     Keys.
 
-%% Bonus: kill a fraction P of the peers. The killed processes simply stop
-%% existing -- they get no warning and send no goodbye, which is the hard
-%% case for Pastry: neighbours learn of the failure only through detection.
+%% Bonus: kill a fraction P of the peers. They get no warning, so their
+%% neighbours only find out through failure detection.
 kill_nodes(Peers, P) when P > 0.0 ->
     Shuffled = [X || {_, X} <- lists:sort([{rand:uniform(), Peer} || Peer <- Peers])],
     K = min(length(Peers) - 1, round(P * length(Peers))),
@@ -113,9 +109,8 @@ kill_nodes(Peers, P) when P > 0.0 ->
 kill_nodes(Peers, _) ->
     {Peers, 0}.
 
-%% Every request ends in exactly one request_done: found, not found, or
-%% given up on after its timeout. So the count of expected results is exact,
-%% and the silence timeout below is a backstop, not the normal way out.
+%% Each request sends exactly one request_done (found, not found or timed
+%% out), so we know how many to wait for. The 30s timeout is just a backstop.
 collect_lookups(Total, #{done := Total} = Stats) ->
     Stats;
 collect_lookups(Total, Stats) ->
@@ -136,7 +131,6 @@ collect_lookups(Total, Stats) ->
             Stats
     end.
 
-%% Leftover messages from the torn-down network must not leak into the next
-%% run when several runs share one VM.
+%% clear leftover messages so they don't affect the next run in the same VM
 drain() ->
     receive _ -> drain() after 0 -> ok end.

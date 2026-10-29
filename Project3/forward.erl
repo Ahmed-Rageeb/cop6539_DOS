@@ -6,7 +6,7 @@ forward(Msg, Key, NextId, State) ->
         {NextId, NextPid} ->
             Msg1 = app_forward(Msg, State),
             case lost(Msg1, NextId, State) of
-                true  -> ok;    % the link failed: the message simply vanishes
+                true  -> ok;    % link failed, message is lost
                 false -> NextPid ! {route, Msg1#{hops => maps:get(hops, Msg1) + 1}, Key}
             end,
             State;
@@ -14,8 +14,8 @@ forward(Msg, Key, NextId, State) ->
             deliver:deliver(Msg, Key, State)
     end.
 
-%% Bonus: transmission failures apply to lookups, which are what the
-%% experiments measure. Joins and inserts happen before failure onset.
+%% Bonus: only lookups can be lost. Joins and inserts happen before the
+%% failures start.
 lost(#{type := lookup}, NextId, State) ->
     failure:lost(maps:get(id, State), NextId, maps:get(opts, State, #{}));
 lost(_Msg, _NextId, _State) ->
