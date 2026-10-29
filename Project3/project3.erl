@@ -22,7 +22,7 @@ main(Args) ->
 
 usage() ->
     io:format(standard_error,
-      "COP6539 Project 3 -- Pastry~n~n"
+      "COP6539 Project 3: Pastry~n~n"
       "  project3 <numNodes> <numRequests> [options]~n~n"
       "Bonus options (any position):~n"
       "  kill=0.2      fraction of nodes that die after the network is built~n"

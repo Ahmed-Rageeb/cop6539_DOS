@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run Project 3 on Mac or Linux, for example:  sh project3 1000 10
+# Builds first if needed. Needs erl and erlc on the PATH.
+cd "$(dirname "$0")" || exit 1
+[ -f project3.beam ] || sh build.sh || exit 1
+exec erl -noshell -pa . -run project3 main "$@" -s init stop

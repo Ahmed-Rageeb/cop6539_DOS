@@ -2,7 +2,8 @@
 # Runs all the experiments, each one in a new Erlang VM so a crash only
 # loses that run. Results go to results/
 set -u
-ERL="/c/Program Files/Erlang OTP/bin/erl"
+ERL=erl
+[ -x "/c/Program Files/Erlang OTP/bin/erl" ] && ERL="/c/Program Files/Erlang OTP/bin/erl"
 cd "$(dirname "$0")"
 run() { "$ERL" -noshell -pa . -run experiments main "$@" -s init stop; }
 

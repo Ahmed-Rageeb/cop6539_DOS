@@ -28,6 +28,8 @@ project3.bat <numNodes> <numRequests>
 
 Example: `project3.bat 100 5`
 
+On Mac or Linux: `sh project3 100 5` (from inside Project3, builds itself the first time).
+
 Or by hand. Make sure to compile every module. `forward.erl` calls `failure.erl`
 on every lookup, so if you leave it out it compiles fine but crashes when run:
 

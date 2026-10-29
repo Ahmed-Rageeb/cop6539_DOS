@@ -9,15 +9,26 @@ an object store that maps a key (a 128-bit id, same as the node ids) to a string
 
 ## How to run
 
+You need Erlang/OTP installed. We tested with OTP 29.
+
+On **Windows**:
+
 ```
 build.bat
 project3.bat <numNodes> <numRequests>
 ```
 
+On **Mac or Linux** (builds automatically the first time):
+
+```
+sh project3 <numNodes> <numRequests>
+```
+
 For example:
 
 ```
-project3.bat 1000 10
+project3.bat 1000 10        (Windows)
+sh project3 1000 10         (Mac / Linux)
 ```
 
 Each peer makes `numRequests` lookups for random stored objects, one per second.
@@ -32,7 +43,14 @@ Average hops: 2.4841
 ```
 
 In PowerShell you need `.\` in front of the scripts, for example `.\build.bat`.
-From the Erlang shell, `main:start(1000, 10)` does the same thing.
+
+To build and run by hand on Mac or Linux (on Windows use `build.bat`, since
+`erlc *.erl` doesn't expand the `*` there):
+
+```
+erlc *.erl
+erl -noshell -run project3 main 1000 10 -s init stop
+```
 
 ## What is working
 
@@ -166,4 +184,6 @@ At 1,000 nodes with 20% failure (average of three runs):
 | `pastry_util.erl` | 128-bit ids: hashing, digits, shared prefix, distance |
 | `failure.erl` | the failure models (bonus) |
 | `experiments.erl`, `report.erl` | run the experiments and make the reports |
-| `build.bat`, `project3.bat`, `run-experiments.sh`, `report.bat` | scripts |
+| `build.bat`, `project3.bat` | build and run on Windows |
+| `build.sh`, `project3` | build and run on Mac or Linux |
+| `run-experiments.sh`, `report.bat` | rerun the experiments and make the reports |

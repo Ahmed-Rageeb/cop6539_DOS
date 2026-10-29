@@ -1,0 +1,5 @@
+# Shell scripts must keep LF line endings or they fail on Mac/Linux.
+*.sh              text eol=lf
+Project3/project3 text eol=lf
+# Windows batch files work best with CRLF.
+*.bat             text eol=crlf
